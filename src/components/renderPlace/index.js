@@ -1,8 +1,10 @@
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState, useRef } from "react";
 import { DragDropContext } from "react-beautiful-dnd";
 import { Droppable, Draggable } from "react-beautiful-dnd";
 import { getDraggableItemStyle } from "../../helpers/styleFn.js";
 import SideBarRender from "../sidebar";
+import axios from "axios";
+import { saveAs } from "file-saver";
 import {
   reOrderWithInSameArea,
   reOrderWithOtherArea,
@@ -24,6 +26,7 @@ const RenderPlace = () => {
   const [sidebarElements, setSideBarElements] = useState(initialElements);
   const [droppedElements, setDroppedElements] = useState([]);
   const [dropvalue, setDropValue] = useState({});
+  const [JSONData, setJSONData] = useState(null);
 
   useEffect(() => {
     const previousElements = JSON.parse(localStorage.getItem("movedElements"));
@@ -31,17 +34,26 @@ const RenderPlace = () => {
       setDroppedElements(previousElements);
     }
   }, []);
+  useEffect(() => {
+    // const previousElements = JSON.parse(localStorage.getItem("movedElements"));
+    const previousElements = JSONData;
+    console.log(JSONData);
+    if (previousElements && previousElements?.length) {
+      setDroppedElements(previousElements);
+    }
+  }, [JSONData]);
   const formik = useFormik({
     initialValues: dropvalue,
     onSubmit: (values) => {
       alert(JSON.stringify(values, null, 2));
     },
-    handleChange: (e) => {
-      console.log(e);
-    },
-    handle: (e) => {
-      console.log(e);
-    },
+    // handleChange: (e) => {
+    //   console.log(e);
+    // },
+    // handle: (e) => {
+    //   console.log(e);
+    // },
+    // validationSchema: validationSchema,
   });
 
   const generateElement = (type, id) => {
@@ -88,7 +100,6 @@ const RenderPlace = () => {
 
       temp[droppedElements.length] = "";
       setDropValue(temp);
-      console.log(dropvalue);
 
       let valueAfterElementInsertion = reOrderWithOtherArea(
         droppedElements,
@@ -103,30 +114,103 @@ const RenderPlace = () => {
   const handleSave = () => {
     if (droppedElements?.length) {
       localStorage.setItem("movedElements", JSON.stringify(droppedElements));
-      alert("Elements Saved!");
+      saveFile(droppedElements);
     }
+  };
+  const handleImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) {
+      return;
+    }
+
+    const fileReader = new FileReader();
+
+    fileReader.onload = () => {
+      try {
+        const json = JSON.parse(fileReader.result);
+        console.log(json);
+        setJSONData(json);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    fileReader.readAsText(file);
+  };
+
+  const saveFile = (jsonData) => {
+    const data = jsonData.map((index) => {
+      return {
+        id: index.id,
+        element: index.element,
+        value: formik.values[index.id],
+      };
+    });
+    const blob = new Blob([JSON.stringify(data)], {
+      type: "application/json;charset=utf-8",
+    });
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const day = now.getDate();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    const second = now.getSeconds();
+
+    const formattedMonth = month < 10 ? `0${month}` : `${month}`;
+    const formattedDay = day < 10 ? `0${day}` : `${day}`;
+    const formattedHour = hour < 10 ? `0${hour}` : `${hour}`;
+    const formattedMinute = minute < 10 ? `0${minute}` : `${minute}`;
+    const formattedSecond = second < 10 ? `0${second}` : `${second}`;
+
+    const formattedTime = `${year}${formattedMonth}${formattedDay}${formattedHour}${formattedMinute}${formattedSecond}`;
+    saveAs(blob, `${formattedTime}.json`);
+    // axios
+    //   .post("http://localhost:5000/saveFile/", JSON.stringify(data))
+    //   .then((res) => {
+    //     console.log(res);
+    //     alert("Elements Saved!");
+    //   })
+    //   .catch((err) => {
+    //     console.log(err);
+    //   });
   };
 
   const handleClear = () => {
     setDroppedElements([]);
     localStorage.removeItem("movedElements");
   };
+
+  const openDialog = () => {
+    inputRef.current.click();
+  };
+
+  const inputRef = useRef(null);
+
   const returnRespectiveHtmlElement = (type, index, value) => {
     switch (type) {
       case "button":
-        return <><button>I'm button</button></>;
+        return (
+          <>
+            <button>I'm button</button>
+          </>
+        );
       case "input":
         return (
           <>
             <input id={index} onChange={formik.handleChange} value={value} />
-            {!value ? <div>sadfsa</div> : null}
+            {!value ? (
+              <div style={{ color: "red" }}>This field is required!</div>
+            ) : null}
           </>
         );
       case "textarea":
         return (
           <>
             <textarea id={index} onChange={formik.handleChange} value={value} />
-            {!value ? <div>afsdfasdf</div> : null}
+            {!value ? (
+              <div style={{ color: "red" }}>This field is required!</div>
+            ) : null}
           </>
         );
       case "box":
@@ -145,7 +229,11 @@ const RenderPlace = () => {
         <Suspense fallback={<div>DroppablePlace loading...</div>}>
           <Droppable droppableId="droppable">
             {(provided, snapshot) => (
-              <div className="droppable-wrapper" ref={provided.innerRef}>
+              <div
+                className="droppable-wrapper"
+                ref={provided.innerRef}
+                style={{ width: "50%" }}
+              >
                 <form>
                   {droppedElements?.length ? (
                     droppedElements?.map((item, index) => (
@@ -188,6 +276,18 @@ const RenderPlace = () => {
       </div>
 
       <div className="btn-wrapper">
+        {/* <button onClick={handleImport} className="import-btn"> */}
+        <div>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".json" // optional file types to accept
+            onChange={handleImport}
+            style={{ display: "none" }}
+          />
+          <button onClick={openDialog}>Import</button>
+        </div>
+        {/* </button> */}
         <button onClick={handleSave} className="save-btn">
           Save
         </button>
